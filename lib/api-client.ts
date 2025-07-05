@@ -1,4 +1,5 @@
-class ApiClient {
+// API Client utility for making HTTP requests
+export class ApiClient {
   private baseUrl: string;
 
   constructor(baseUrl: string = '/api') {
@@ -23,8 +24,31 @@ class ApiClient {
       const response = await fetch(url, config);
       
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || error.message || 'Something went wrong');
+        let errorMessage = `HTTP error! status: ${response.status}`;
+        
+        try {
+          // Try to parse error response as JSON
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorData.message || errorMessage;
+        } catch {
+          // If JSON parsing fails, try to get text
+          try {
+            const errorText = await response.text();
+            if (errorText) {
+              errorMessage = errorText;
+            }
+          } catch {
+            // If both fail, use the default message
+          }
+        }
+        
+        throw new Error(errorMessage);
+      }
+
+      // Handle empty responses (like 204 No Content)
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        return {} as T;
       }
 
       return await response.json();
@@ -122,5 +146,40 @@ class ApiClient {
   }
 }
 
+// Default instance
 export const apiClient = new ApiClient();
-export { ApiClient };
+
+// Utility functions for common operations
+export const fetchDashboardStats = async () => {
+  // Mock data for demonstration
+  return {
+    totalUsers: 12345,
+    totalRevenue: 98765,
+    activeProjects: 23,
+    completionRate: 87
+  };
+};
+
+export const fetchRecentActivity = async () => {
+  // Mock data for demonstration
+  return [
+    {
+      id: 1,
+      user: 'John Doe',
+      action: 'Created new project',
+      timestamp: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
+    },
+    {
+      id: 2,
+      user: 'Jane Smith',
+      action: 'Updated user profile',
+      timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
+    },
+    {
+      id: 3,
+      user: 'Mike Johnson',
+      action: 'Completed task #123',
+      timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
+    },
+  ];
+};
