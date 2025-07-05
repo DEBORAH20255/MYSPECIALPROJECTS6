@@ -4,22 +4,23 @@ let redis: Redis | null = null;
 
 export function getRedisClient(): Redis {
   if (!redis) {
-    if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
-      throw new Error('Redis configuration missing. Please set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN');
-    }
-
     redis = new Redis({
-      url: process.env.UPSTASH_REDIS_REST_URL,
-      token: process.env.UPSTASH_REDIS_REST_TOKEN,
+      url: process.env.UPSTASH_REDIS_REST_URL!,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN!,
     });
   }
-
   return redis;
 }
 
+// Helper function to generate session key
+export function getSessionKey(sessionToken: string): string {
+  return `session:${sessionToken}`;
+}
+
+// Set session with expiration
 export async function setSession(sessionToken: string, email: string, expirationSeconds: number = 60 * 60 * 24 * 30) {
   const redis = getRedisClient();
-  await redis.set(`session:${sessionToken}`, email, 'EX', expirationSeconds);
+  await redis.set(`session:${sessionToken}`, email, { ex: expirationSeconds });
 }
 
 export async function getSession(sessionToken: string): Promise<string | null> {
@@ -32,7 +33,7 @@ export async function deleteSession(sessionToken: string): Promise<void> {
   await redis.del(`session:${sessionToken}`);
 }
 
-export async function extendSession(sessionToken: string, expirationSeconds: number = 60 * 60 * 24 * 30): Promise<void> {
-  const redis = getRedisClient();
-  await redis.expire(`session:${sessionToken}`, expirationSeconds);
+// Helper function to normalize email
+export function normalizeEmail(email: string): string {
+  return email.toLowerCase().trim();
 }

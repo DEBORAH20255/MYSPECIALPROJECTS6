@@ -3,6 +3,7 @@ import { deleteSession } from '@/lib/redis-client';
 
 export async function POST(request: NextRequest) {
   try {
+    // Get session token from cookie
     const sessionToken = request.cookies.get('session')?.value;
 
     if (sessionToken) {
@@ -10,18 +11,19 @@ export async function POST(request: NextRequest) {
       await deleteSession(sessionToken);
     }
 
-    const response = NextResponse.json({ 
-      success: true,
-      message: 'Logged out successfully' 
-    });
-    
+    // Create response and clear the session cookie
+    const response = NextResponse.json(
+      { message: 'Logout successful' },
+      { status: 200 }
+    );
+
     // Clear the session cookie
     response.cookies.set('session', '', {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      expires: new Date(0),
-      path: '/',
+      maxAge: 0, // Expire immediately
+      path: '/'
     });
 
     return response;
