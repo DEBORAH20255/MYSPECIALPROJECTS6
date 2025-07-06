@@ -1,3 +1,4 @@
+'use client';
 import AcrobatLogo from "@/components/AcrobatLogo";
 import { useRouter } from "next/navigation";
 
