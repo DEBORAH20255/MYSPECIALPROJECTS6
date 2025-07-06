@@ -1,8 +1,10 @@
+export const dynamic = 'force-dynamic'; // 👈 Add this line to declare the route as dynamic
+
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/redis-client';
 import { User } from '@/types/api';
 
-// Mock user data - in a real app, this would come from a database
+// Mock user data
 const mockUsers: User[] = [
   {
     id: '1',
@@ -38,32 +40,22 @@ const mockUsers: User[] = [
 
 export async function GET(request: NextRequest) {
   try {
-    // Check authentication
     const sessionToken = request.cookies.get('session')?.value;
-    
+
     if (!sessionToken) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Verify session exists in Redis
     const userEmail = await getSession(sessionToken);
     if (!userEmail) {
-      return NextResponse.json(
-        { error: 'Invalid session' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'Invalid session' }, { status: 401 });
     }
 
-    // Get query parameters
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '10');
 
-    // Filter users based on search term
     let filteredUsers = mockUsers;
     if (search) {
       filteredUsers = mockUsers.filter(user =>
@@ -71,7 +63,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Calculate pagination
     const startIndex = (page - 1) * limit;
     const endIndex = startIndex + limit;
     const paginatedUsers = filteredUsers.slice(startIndex, endIndex);

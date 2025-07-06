@@ -1,3 +1,6 @@
+// Mark route as dynamic to support reading cookies (required by Next.js)
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/redis-client';
 
@@ -13,7 +16,7 @@ export async function GET(request: NextRequest) {
     }
 
     const email = await getSession(sessionToken);
-    
+
     if (!email) {
       return NextResponse.json(
         { error: 'Invalid or expired session' },
